@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'screens/monitor_screen.dart';
+import 'screens/guardian_home_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/patient_home_screen.dart';
+import 'services/session_manager.dart';
 
 void main() {
   runApp(const PenguCareApp());
@@ -17,28 +20,40 @@ class PenguCareApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
       ),
-      home: const HomePage(),
+      home: const AuthGate(),
     );
   }
 }
 
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+/// Loads any saved login session and routes to the right screen: login if
+/// nobody is signed in, otherwise the patient or guardian home screen.
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Future<void> _loadFuture = SessionManager.load();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Pengu Care')),
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const MonitorScreen()),
-            );
-          },
-          child: const Text('낙상 감지 모니터링 시작'),
-        ),
-      ),
+    return FutureBuilder<void>(
+      future: _loadFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (!SessionManager.isLoggedIn) {
+          return const LoginScreen();
+        }
+        return SessionManager.isPatient
+            ? const PatientHomeScreen()
+            : const GuardianHomeScreen();
+      },
     );
   }
 }

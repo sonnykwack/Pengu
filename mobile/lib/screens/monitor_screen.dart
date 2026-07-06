@@ -6,9 +6,13 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../models/fall_event.dart';
 import '../models/sensor_sample.dart';
 import '../services/fall_detector.dart';
+import '../services/fall_event_api.dart';
+import '../services/session_manager.dart';
 
 class MonitorScreen extends StatefulWidget {
-  const MonitorScreen({super.key});
+  final FallEventApi? fallEventApi;
+
+  const MonitorScreen({super.key, this.fallEventApi});
 
   @override
   State<MonitorScreen> createState() => _MonitorScreenState();
@@ -17,6 +21,7 @@ class MonitorScreen extends StatefulWidget {
 class _MonitorScreenState extends State<MonitorScreen> {
   final FallDetector _detector = FallDetector();
   final List<FallEvent> _events = [];
+  late final FallEventApi _fallEventApi = widget.fallEventApi ?? FallEventApi();
   StreamSubscription<AccelerometerEvent>? _subscription;
   double _currentMagnitude = 0;
 
@@ -44,8 +49,22 @@ class _MonitorScreenState extends State<MonitorScreen> {
       _currentMagnitude = sample.magnitude;
       if (fallEvent != null) {
         _events.insert(0, fallEvent);
+        _reportFallEvent(fallEvent);
       }
     });
+  }
+
+  void _reportFallEvent(FallEvent event) {
+    final token = SessionManager.token;
+    if (token == null) return;
+    // 보호자 알림은 부가 기능이라, 네트워크 실패가 화면 동작을 막지 않도록 조용히 무시합니다.
+    _fallEventApi
+        .reportFall(
+          token,
+          peakMagnitude: event.peakMagnitude,
+          detectedAt: event.detectedAt,
+        )
+        .catchError((_) {});
   }
 
   void _simulateFall() {
@@ -63,6 +82,7 @@ class _MonitorScreenState extends State<MonitorScreen> {
     );
     if (fallEvent != null) {
       setState(() => _events.insert(0, fallEvent));
+      _reportFallEvent(fallEvent);
     }
   }
 

@@ -56,8 +56,8 @@ Claude는 이 클라우드 세션 안에서 코드를 작성하고, 검증하고
 - [x] 백엔드 Hello World 서버 (`backend/`, FastAPI, `/`와 `/health` 응답 확인)
 - [x] 앱 Hello World 화면 (`mobile/`, Flutter, analyze/test 통과)
 - [x] 낙상 감지 기능 (1차 버전, 아래 설명 참고)
-- [ ] 증상 입력 + AI 리포트 생성
-- [ ] 알림(이메일/푸시) 기능
+- [x] 증상 입력 + AI 리포트 생성 (아래 7번 설명 참고)
+- [x] 계정/역할/초대코드 연결 + 이메일 알림 (아래 8번 설명 참고)
 - [ ] 무료 서버 배포
 - [ ] 원스토어 배포
 
@@ -80,6 +80,54 @@ Claude는 이 클라우드 세션 안에서 코드를 작성하고, 검증하고
 **나중에 개선 가능한 부분** (지금 당장 안 해도 되는 것): 정확도를 더 높이고 싶으면 TFLite
 머신러닝 모델로 업그레이드할 수 있습니다. 심사 때 "1차는 임계값 알고리즘으로 구현했고,
 추가 개선 방향으로 ML 모델을 고려했다"고 설명하면 오히려 더 좋은 인상을 줄 수 있어요.
+
+## 7. 증상 입력 + AI 리포트 생성, 어떻게 동작하나요?
+
+1. 환자가 앱의 "증상 입력하기" 화면에서 증상을 텍스트로 적습니다 (키보드의 마이크 버튼으로
+   말해서 입력해도 됩니다 — Android 키보드 자체 기능이라 앱에서 따로 만들 필요가 없습니다).
+2. 앱이 백엔드의 `POST /reports/symptom`으로 그 텍스트를 보냅니다.
+3. 백엔드가 Claude(Anthropic) API를 호출해서, 보호자가 보기 쉬운 형태의 리포트
+   (요약/심각도/권장 행동)를 JSON으로 받아옵니다.
+4. 앱이 그 리포트를 화면에 보여줍니다.
+
+관련 코드:
+- `backend/app/services/report_generator.py`: Claude API 호출 로직
+- `backend/app/main.py`: `/reports/symptom` API
+- `backend/tests/test_reports.py`: 실제 API 호출 없이 가짜(fake) 응답으로 검증하는 자동 테스트
+- `mobile/lib/services/report_api.dart`: 앱에서 백엔드를 호출하는 코드
+- `mobile/lib/screens/symptom_screen.dart`: 증상 입력 화면
+
+**지금 당장 필요한 것**: 이 기능이 실제로 동작하려면 `ANTHROPIC_API_KEY`가 필요합니다
+(console.anthropic.com에서 발급). 서버를 무료 서버에 배포하는 단계(7번 작업)에서 함께 설정할
+예정이라 지금 당장 안 하셔도 됩니다.
+
+## 8. 계정/역할/초대코드 연결 + 이메일 알림, 어떻게 동작하나요?
+
+1. 앱을 처음 실행하면 로그인 화면이 나옵니다. 가입할 때 "환자로 사용" / "보호자로 사용"
+   중 하나를 선택합니다.
+2. **환자**는 로그인 후 홈 화면에서 "초대 코드 만들기"를 눌러 코드를 받습니다 (예: `A1B2C3`).
+   이 코드를 보호자에게 말해줍니다 (전화, 문자 등 아무 방법이나 상관없음).
+3. **보호자**는 로그인 후 그 코드를 입력해서 "연결하기"를 누르면 환자와 연결됩니다.
+4. 연결된 이후, 환자 쪽에서 낙상이 감지되거나 증상을 입력하면, 백엔드가 연결된 모든
+   보호자에게 자동으로 이메일을 보냅니다.
+
+계정/비밀번호는 서버에 안전하게 암호화(bcrypt)해서 저장하고, 로그인하면 토큰(JWT)을 받아서
+앱에 저장해둡니다 (다음에 앱을 켜도 다시 로그인 안 해도 됨).
+
+관련 코드:
+- `backend/app/models_db.py`: 사용자/연결/낙상기록/증상기록 데이터 구조
+- `backend/app/routers/auth.py`: 회원가입/로그인
+- `backend/app/routers/pairing.py`: 초대 코드 생성/연결
+- `backend/app/routers/events.py`: 낙상 이벤트 기록 + 알림
+- `backend/app/routers/reports.py`: 증상 리포트 생성 + 알림
+- `backend/app/notifications.py`, `backend/app/services/email_sender.py`: 이메일 발송
+- `backend/tests/`: 회원가입, 로그인, 초대코드 연결, 알림 발송까지 전부 자동 테스트로 검증
+- `mobile/lib/screens/login_screen.dart`, `patient_home_screen.dart`, `guardian_home_screen.dart`: 앱 화면
+- `mobile/lib/services/session_manager.dart`: 로그인 상태를 폰에 저장
+
+**지금 당장 필요한 것**: 실제로 이메일을 받으려면 `SMTP_HOST` 등 이메일 서버 정보가 필요합니다.
+지금은 설정 안 해도 콘솔에 로그만 남고 앱은 정상 동작합니다. 나중에 무료 서버에 배포하는
+단계에서 함께 설정할 예정입니다.
 
 ---
 *이 문서는 진행될 때마다 계속 업데이트됩니다.*
